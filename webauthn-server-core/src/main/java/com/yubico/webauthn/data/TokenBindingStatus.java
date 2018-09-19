@@ -2,6 +2,7 @@ package com.yubico.webauthn.data;
 
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 public enum TokenBindingStatus {
 
@@ -17,7 +18,12 @@ public enum TokenBindingStatus {
 
     public static Optional<TokenBindingStatus> fromJson(String value) {
         return Arrays.asList(values()).stream()
-            .filter(v -> v.jsonValue.equals(value))
+            .filter(new Predicate<TokenBindingStatus>() {
+                @Override
+                public boolean test(TokenBindingStatus v) {
+                    return v.jsonValue.equals(value);
+                }
+            })
             .findAny();
     }
 

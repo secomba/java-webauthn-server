@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.yubico.webauthn.impl.json.StringIdJsonSerializer;
 import com.yubico.webauthn.impl.json.WithStringId;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -27,7 +28,12 @@ public enum PublicKeyCredentialType implements WithStringId {
     private final String id;
 
     public static Optional<PublicKeyCredentialType> fromString(String id) {
-        return Stream.of(values()).filter(v -> v.id.equals(id)).findAny();
+        return Stream.of(values()).filter(new Predicate<PublicKeyCredentialType>() {
+            @Override
+            public boolean test(PublicKeyCredentialType v) {
+                return v.id.equals(id);
+            }
+        }).findAny();
     }
 
 }

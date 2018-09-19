@@ -5,6 +5,8 @@ import com.yubico.webauthn.util.WebAuthnCodecs;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+
 import lombok.Builder;
 import lombok.NonNull;
 import lombok.Value;
@@ -75,13 +77,28 @@ public class PublicKeyCredentialRequestOptions {
         this.challenge = challenge;
         this.timeout = timeout;
         this.rpId = rpId;
-        this.allowCredentials = allowCredentials.map(Collections::unmodifiableList);
+        this.allowCredentials = allowCredentials.map(new Function<List<PublicKeyCredentialDescriptor>, List<PublicKeyCredentialDescriptor>>() {
+            @Override
+            public List<PublicKeyCredentialDescriptor> apply(List<PublicKeyCredentialDescriptor> publicKeyCredentialDescriptors) {
+                return Collections.unmodifiableList(publicKeyCredentialDescriptors);
+            }
+        });
         this.userVerification = userVerification;
-        this.extensions = extensions.map(WebAuthnCodecs::deepCopy);
+        this.extensions = extensions.map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
     public Optional<JsonNode> getExtensions() {
-        return this.extensions.map(WebAuthnCodecs::deepCopy);
+        return this.extensions.map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
 }

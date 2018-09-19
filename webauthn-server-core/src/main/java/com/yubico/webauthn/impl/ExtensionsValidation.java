@@ -7,6 +7,8 @@ import com.yubico.webauthn.data.PublicKeyCredential;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import lombok.experimental.UtilityClass;
 
@@ -22,7 +24,17 @@ public class ExtensionsValidation {
             ));
         }
 
-        Set<String> requestedExtensionIds = requested.map(req -> StreamUtil.toSet(req.fieldNames())).orElseGet(HashSet::new);
+        Set<String> requestedExtensionIds = requested.map(new Function<JsonNode, Set<String>>() {
+            @Override
+            public Set<String> apply(JsonNode req) {
+                return StreamUtil.toSet(req.fieldNames());
+            }
+        }).orElseGet(new Supplier<Set<String>>() {
+            @Override
+            public Set<String> get() {
+                return new HashSet<String>();
+            }
+        });
         Set<String> clientExtensionIds = StreamUtil.toSet(response.getClientExtensionResults().fieldNames());
 
         if (!requestedExtensionIds.containsAll(clientExtensionIds)) {
@@ -34,11 +46,26 @@ public class ExtensionsValidation {
         }
 
         Set<String> authenticatorExtensionIds = response.getResponse().getParsedAuthenticatorData().getExtensions()
-            .map(extensions -> extensions.getKeys().stream()
-                .map(CBORObject::AsString)
-                .collect(Collectors.toSet())
+            .map(new Function<CBORObject, Set<String>>() {
+                     @Override
+                     public Set<String> apply(CBORObject extensions) {
+                         return extensions.getKeys().stream()
+                                 .map(new Function<CBORObject, String>() {
+                                     @Override
+                                     public String apply(CBORObject cborObject) {
+                                         return cborObject.AsString();
+                                     }
+                                 })
+                                 .collect(Collectors.toSet());
+                     }
+                 }
             )
-            .orElseGet(HashSet::new);
+            .orElseGet(new Supplier<Set<String>>() {
+                @Override
+                public Set<String> get() {
+                    return new HashSet<String>();
+                }
+            });
 
         if (!requestedExtensionIds.containsAll(authenticatorExtensionIds)) {
             throw new IllegalArgumentException(String.format(

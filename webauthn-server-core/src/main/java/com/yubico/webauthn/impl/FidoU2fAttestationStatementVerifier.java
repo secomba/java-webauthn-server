@@ -18,6 +18,9 @@ import java.security.interfaces.ECPublicKey;
 import java.security.spec.ECParameterSpec;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.jce.ECNamedCurveTable;
 import org.bouncycastle.jce.spec.ECNamedCurveParameterSpec;
@@ -37,17 +40,25 @@ public class FidoU2fAttestationStatementVerifier implements AttestationStatement
     }
 
     private X509Certificate getAttestationCertificate(AttestationObject attestationObject) throws CertificateException {
-        return getX5cAttestationCertificate(attestationObject).map(attestationCertificate -> {
-            if ("EC".equals(attestationCertificate.getPublicKey().getAlgorithm())
-                && isP256(((ECPublicKey) attestationCertificate.getPublicKey()).getParams())
-            ) {
-                return attestationCertificate;
-            } else {
-                throw new IllegalArgumentException("Attestation certificate for fido-u2f must have an ECDSA P-256 public key.");
+        return getX5cAttestationCertificate(attestationObject).map(new Function<X509Certificate, X509Certificate>() {
+            @Override
+            public X509Certificate apply(X509Certificate attestationCertificate) {
+                if ("EC".equals(attestationCertificate.getPublicKey().getAlgorithm())
+                        && isP256(((ECPublicKey) attestationCertificate.getPublicKey()).getParams())
+                        ) {
+                    return attestationCertificate;
+                } else {
+                    throw new IllegalArgumentException("Attestation certificate for fido-u2f must have an ECDSA P-256 public key.");
+                }
             }
-        }).orElseThrow(() -> new IllegalArgumentException(
-            "fido-u2f attestation statement must have an \"x5c\" property set to an array of at least one DER encoded X.509 certificate."
-        ));
+        }).orElseThrow(new Supplier<IllegalArgumentException>() {
+            @Override
+            public IllegalArgumentException get() {
+                return new IllegalArgumentException(
+                        "fido-u2f attestation statement must have an \"x5c\" property set to an array of at least one DER encoded X.509 certificate."
+                );
+            }
+        });
     }
 
     private static boolean validSelfSignature(X509Certificate cert) {
@@ -98,50 +109,58 @@ public class FidoU2fAttestationStatementVerifier implements AttestationStatement
             throw new IllegalArgumentException("fido-u2f attestation statement must have a \"sig\" property set to a DER encoded signature.");
         }
 
-        return attData.map(attestationData -> {
-            JsonNode signature = attestationObject.getAttestationStatement().get("sig");
+        return attData.map(new Function<AttestationData, Boolean>() {
+            @Override
+            public Boolean apply(AttestationData attestationData) {
+                JsonNode signature = attestationObject.getAttestationStatement().get("sig");
 
-            if (signature.isBinary()) {
-                ByteArray userPublicKey;
+                if (signature.isBinary()) {
+                    ByteArray userPublicKey;
 
-                try {
-                    userPublicKey = WebAuthnCodecs.ecPublicKeyToRaw(attestationData.getParsedCredentialPublicKey());
-                } catch (IOException | CoseException e) {
-                    RuntimeException err = new RuntimeException(String.format("Failed to parse public key from attestation data %s", attestationData));
-                    log.error(err.getMessage(), err);
-                    throw err;
+                    try {
+                        userPublicKey = WebAuthnCodecs.ecPublicKeyToRaw(attestationData.getParsedCredentialPublicKey());
+                    } catch (IOException | CoseException e) {
+                        RuntimeException err = new RuntimeException(String.format("Failed to parse public key from attestation data %s", attestationData));
+                        log.error(err.getMessage(), err);
+                        throw err;
+                    }
+
+                    ByteArray keyHandle = attestationData.getCredentialId();
+
+                    RawRegisterResponse u2fRegisterResponse;
+                    try {
+                        u2fRegisterResponse = new RawRegisterResponse(
+                                userPublicKey.getBytes(),
+                                keyHandle.getBytes(),
+                                attestationCertificate,
+                                signature.binaryValue()
+                        );
+                    } catch (IOException e) {
+                        RuntimeException err = new RuntimeException("signature.isBinary() was true but signature.binaryValue() failed", e);
+                        log.error(err.getMessage(), err);
+                        throw err;
+                    }
+
+                    try {
+                        u2fRegisterResponse.checkSignature(
+                                attestationObject.getAuthenticatorData().getRpIdHash().getBytes(),
+                                clientDataJsonHash.getBytes()
+                        );
+                        return true;
+                    } catch (U2fBadInputException e) {
+                        return false;
+                    }
+                } else {
+                    throw new IllegalArgumentException("\"sig\" property of fido-u2f attestation statement must be a CBOR byte array value.");
                 }
 
-                ByteArray keyHandle = attestationData.getCredentialId();
-
-                RawRegisterResponse u2fRegisterResponse;
-                try {
-                    u2fRegisterResponse = new RawRegisterResponse(
-                        userPublicKey.getBytes(),
-                        keyHandle.getBytes(),
-                        attestationCertificate,
-                        signature.binaryValue()
-                    );
-                } catch (IOException e) {
-                    RuntimeException err = new RuntimeException("signature.isBinary() was true but signature.binaryValue() failed", e);
-                    log.error(err.getMessage(), err);
-                    throw err;
-                }
-
-                try {
-                    u2fRegisterResponse.checkSignature(
-                        attestationObject.getAuthenticatorData().getRpIdHash().getBytes(),
-                        clientDataJsonHash.getBytes()
-                    );
-                    return true;
-                } catch (U2fBadInputException e) {
-                    return false;
-                }
-            } else {
-                throw new IllegalArgumentException("\"sig\" property of fido-u2f attestation statement must be a CBOR byte array value.");
             }
-
-        }).orElseThrow(() -> new IllegalArgumentException("Attestation object for credential creation must have attestation data."));
+        }).orElseThrow(new Supplier<IllegalArgumentException>() {
+            @Override
+            public IllegalArgumentException get() {
+                return new IllegalArgumentException("Attestation object for credential creation must have attestation data.");
+            }
+        });
     }
 
 }

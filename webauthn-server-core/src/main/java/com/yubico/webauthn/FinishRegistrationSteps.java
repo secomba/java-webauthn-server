@@ -31,6 +31,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Predicate;
+
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -236,7 +239,12 @@ public class FinishRegistrationSteps {
         @Override
         public void validate() {
             assure(
-                origins.stream().anyMatch(o -> o.equals(clientData.getOrigin())),
+                origins.stream().anyMatch(new Predicate<String>() {
+                    @Override
+                    public boolean test(String o) {
+                        return o.equals(clientData.getOrigin());
+                    }
+                }),
                 "Incorrect origin: " + clientData.getOrigin()
             );
         }
@@ -330,7 +338,12 @@ public class FinishRegistrationSteps {
 
         @Override
         public void validate() {
-            if (request.getAuthenticatorSelection().map(AuthenticatorSelectionCriteria::getUserVerification).orElse(UserVerificationRequirement.PREFERRED) == UserVerificationRequirement.REQUIRED) {
+            if (request.getAuthenticatorSelection().map(new Function<AuthenticatorSelectionCriteria, UserVerificationRequirement>() {
+                @Override
+                public UserVerificationRequirement apply(AuthenticatorSelectionCriteria authenticatorSelectionCriteria) {
+                    return authenticatorSelectionCriteria.getUserVerification();
+                }
+            }).orElse(UserVerificationRequirement.PREFERRED) == UserVerificationRequirement.REQUIRED) {
                 assure(response.getResponse().getParsedAuthenticatorData().getFlags().UV, "User Verification is required.");
             }
         }
@@ -349,7 +362,12 @@ public class FinishRegistrationSteps {
 
         @Override
         public void validate() {
-            if (request.getAuthenticatorSelection().map(AuthenticatorSelectionCriteria::getUserVerification).orElse(UserVerificationRequirement.PREFERRED) != UserVerificationRequirement.REQUIRED) {
+            if (request.getAuthenticatorSelection().map(new Function<AuthenticatorSelectionCriteria, UserVerificationRequirement>() {
+                @Override
+                public UserVerificationRequirement apply(AuthenticatorSelectionCriteria authenticatorSelectionCriteria) {
+                    return authenticatorSelectionCriteria.getUserVerification();
+                }
+            }).orElse(UserVerificationRequirement.PREFERRED) != UserVerificationRequirement.REQUIRED) {
                 assure(response.getResponse().getParsedAuthenticatorData().getFlags().UP, "User Presence is required.");
             }
         }
@@ -557,14 +575,24 @@ public class FinishRegistrationSteps {
                     return allowUntrustedAttestation;
 
                 case BASIC:
-                    return attestationMetadata().filter(Attestation::isTrusted).isPresent();
+                    return attestationMetadata().filter(new Predicate<Attestation>() {
+                        @Override
+                        public boolean test(Attestation attestation) {
+                            return attestation.isTrusted();
+                        }
+                    }).isPresent();
                 default:
                     throw new UnsupportedOperationException("Attestation type not implemented: " + attestationType);
             }
         }
 
         public Optional<Attestation> attestationMetadata() {
-            return trustResolver.flatMap(tr -> tr.resolveTrustAnchor(attestation));
+            return trustResolver.flatMap(new Function<AttestationTrustResolver, Optional<Attestation>>() {
+                @Override
+                public Optional<Attestation> apply(AttestationTrustResolver tr) {
+                    return tr.resolveTrustAnchor(attestation);
+                }
+            });
         }
     }
 

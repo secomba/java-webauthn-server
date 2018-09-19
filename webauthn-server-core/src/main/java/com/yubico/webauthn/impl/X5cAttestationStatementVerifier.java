@@ -9,12 +9,18 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
 
 
 public interface X5cAttestationStatementVerifier {
 
     default Optional<X509Certificate> getX5cAttestationCertificate(AttestationObject attestationObject) throws CertificateException {
-        return getAttestationTrustPath(attestationObject).flatMap(certs -> certs.stream().findFirst());
+        return getAttestationTrustPath(attestationObject).flatMap(new Function<List<X509Certificate>, Optional<X509Certificate>>() {
+            @Override
+            public Optional<X509Certificate> apply(List<X509Certificate> certs) {
+                return certs.stream().findFirst();
+            }
+        });
     }
 
     default Optional<List<X509Certificate>> getAttestationTrustPath(AttestationObject attestationObject) throws CertificateException {

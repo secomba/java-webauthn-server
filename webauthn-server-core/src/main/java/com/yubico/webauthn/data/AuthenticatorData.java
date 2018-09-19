@@ -8,6 +8,8 @@ import com.yubico.webauthn.util.WebAuthnCodecs;
 import java.io.ByteArrayInputStream;
 import java.util.Arrays;
 import java.util.Optional;
+import java.util.function.Function;
+
 import lombok.Value;
 
 
@@ -146,7 +148,12 @@ public class AuthenticatorData {
     }
 
     public Optional<CBORObject> getExtensions() {
-        return extensions.map(WebAuthnCodecs::deepCopy);
+        return extensions.map(new Function<CBORObject, CBORObject>() {
+            @Override
+            public CBORObject apply(CBORObject cborObject) {
+                return WebAuthnCodecs.deepCopy(cborObject);
+            }
+        });
     }
 
 }

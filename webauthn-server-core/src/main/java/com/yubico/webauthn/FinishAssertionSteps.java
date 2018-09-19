@@ -3,14 +3,7 @@ package com.yubico.webauthn;
 
 import com.yubico.u2f.crypto.Crypto;
 import com.yubico.u2f.exceptions.U2fBadInputException;
-import com.yubico.webauthn.data.AssertionRequest;
-import com.yubico.webauthn.data.AssertionResult;
-import com.yubico.webauthn.data.AuthenticatorAssertionResponse;
-import com.yubico.webauthn.data.ByteArray;
-import com.yubico.webauthn.data.CollectedClientData;
-import com.yubico.webauthn.data.PublicKeyCredential;
-import com.yubico.webauthn.data.RegisteredCredential;
-import com.yubico.webauthn.data.UserVerificationRequirement;
+import com.yubico.webauthn.data.*;
 import com.yubico.webauthn.exception.Base64UrlException;
 import com.yubico.webauthn.impl.ExtensionsValidation;
 import com.yubico.webauthn.impl.TokenBindingValidator;
@@ -21,6 +14,11 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+
 import lombok.Builder;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
@@ -132,14 +130,34 @@ public class FinishAssertionSteps {
 
         private Optional<ByteArray> userHandle() {
             return response.getResponse().getUserHandle()
-                .map(Optional::of)
-                .orElseGet(() -> credentialRepository.getUserHandleForUsername(request.getUsername().get()));
+                .map(new Function<ByteArray, Optional<ByteArray>>() {
+                    @Override
+                    public Optional<ByteArray> apply(ByteArray byteArray) {
+                        return Optional.of(byteArray);
+                    }
+                })
+                .orElseGet(new Supplier<Optional<ByteArray>>() {
+                    @Override
+                    public Optional<ByteArray> get() {
+                        return credentialRepository.getUserHandleForUsername(request.getUsername().get());
+                    }
+                });
         }
 
         private Optional<String> username() {
             return request.getUsername()
-                .map(Optional::of)
-                .orElseGet(() -> credentialRepository.getUsernameForUserHandle(response.getResponse().getUserHandle().get()));
+                .map(new Function<String, Optional<String>>() {
+                    @Override
+                    public Optional<String> apply(String s) {
+                        return Optional.of(s);
+                    }
+                })
+                .orElseGet(new Supplier<Optional<String>>() {
+                    @Override
+                    public Optional<String> get() {
+                        return credentialRepository.getUsernameForUserHandle(response.getResponse().getUserHandle().get());
+                    }
+                });
         }
     }
 
@@ -156,11 +174,19 @@ public class FinishAssertionSteps {
 
         @Override
         public void validate() {
-            request.getPublicKeyCredentialRequestOptions().getAllowCredentials().ifPresent(allowed -> {
-                if (!(
-                    allowed.stream().anyMatch(allow -> allow.getId().equals(response.getId()))
-                )) {
-                    throw new IllegalArgumentException("Unrequested credential ID: " + response.getId());
+            request.getPublicKeyCredentialRequestOptions().getAllowCredentials().ifPresent(new Consumer<List<PublicKeyCredentialDescriptor>>() {
+                @Override
+                public void accept(List<PublicKeyCredentialDescriptor> allowed) {
+                    if (!(
+                            allowed.stream().anyMatch(new Predicate<PublicKeyCredentialDescriptor>() {
+                                @Override
+                                public boolean test(PublicKeyCredentialDescriptor allow) {
+                                    return allow.getId().equals(response.getId());
+                                }
+                            })
+                    )) {
+                        throw new IllegalArgumentException("Unrequested credential ID: " + response.getId());
+                    }
                 }
             });
         }
@@ -397,7 +423,12 @@ public class FinishAssertionSteps {
                 throw new IllegalArgumentException("Failed to read origin from client data: " + response.getResponse().getClientDataJSONString());
             }
 
-            if (origins.stream().noneMatch(o -> o.equals(responseOrigin))) {
+            if (origins.stream().noneMatch(new Predicate<String>() {
+                @Override
+                public boolean test(String o) {
+                    return o.equals(responseOrigin);
+                }
+            })) {
                 throw new IllegalArgumentException("Incorrect origin: " + responseOrigin);
             }
         }
@@ -613,7 +644,12 @@ public class FinishAssertionSteps {
 
         private long storedSignatureCountBefore() {
             return credentialRepository.lookup(response.getId(), userHandle)
-                .map(RegisteredCredential::getSignatureCount)
+                .map(new Function<RegisteredCredential, Long>() {
+                    @Override
+                    public Long apply(RegisteredCredential registeredCredential) {
+                        return registeredCredential.getSignatureCount();
+                    }
+                })
                 .orElse(0L);
         }
 

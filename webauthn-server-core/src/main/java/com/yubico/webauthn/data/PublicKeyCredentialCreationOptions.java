@@ -6,6 +6,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -94,14 +96,29 @@ public class PublicKeyCredentialCreationOptions {
         this.challenge = challenge;
         this.pubKeyCredParams = Collections.unmodifiableList(pubKeyCredParams);
         this.timeout = timeout;
-        this.excludeCredentials = excludeCredentials.map(Collections::unmodifiableCollection);
+        this.excludeCredentials = excludeCredentials.map(new Function<Collection<PublicKeyCredentialDescriptor>, Collection<PublicKeyCredentialDescriptor>>() {
+            @Override
+            public Collection<PublicKeyCredentialDescriptor> apply(Collection<PublicKeyCredentialDescriptor> it) {
+                return Collections.unmodifiableCollection(it);
+            }
+        });
         this.authenticatorSelection = authenticatorSelection;
         this.attestation = attestation;
-        this.extensions = extensions.map(WebAuthnCodecs::deepCopy);
+        this.extensions = extensions.map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
     public Optional<JsonNode> getExtensions() {
-        return this.extensions.map(WebAuthnCodecs::deepCopy);
+        return this.extensions.map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
 }

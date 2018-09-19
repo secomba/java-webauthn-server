@@ -23,6 +23,9 @@ import com.yubico.webauthn.data.UserIdentity;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import lombok.Builder;
 import lombok.Value;
 
@@ -118,9 +121,22 @@ public class RelyingParty {
                 .rpId(Optional.of(rp.getId()))
                 .challenge(new ByteArray(challengeGenerator.generateChallenge()))
                 .allowCredentials(
-                    (allowCredentials.map(Optional::of).orElseGet(() ->
-                        username.map(un ->
-                            credentialRepository.getCredentialIdsForUsername(un))
+                    (allowCredentials.map(new Function<List<PublicKeyCredentialDescriptor>, Optional<List<PublicKeyCredentialDescriptor>>>() {
+                        @Override
+                        public Optional<List<PublicKeyCredentialDescriptor>> apply(List<PublicKeyCredentialDescriptor> publicKeyCredentialDescriptors) {
+                            return Optional.of(publicKeyCredentialDescriptors);
+                        }
+                    }).orElseGet(new Supplier<Optional<List<PublicKeyCredentialDescriptor>>>() {
+                                     @Override
+                                     public Optional<List<PublicKeyCredentialDescriptor>> get() {
+                                         return username.map(new Function<String, List<PublicKeyCredentialDescriptor>>() {
+                                             @Override
+                                             public List<PublicKeyCredentialDescriptor> apply(String un) {
+                                                 return credentialRepository.getCredentialIdsForUsername(un);
+                                             }
+                                         });
+                                     }
+                                 }
                     ))
                 )
                 .extensions(extensions)

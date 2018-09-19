@@ -4,6 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.yubico.webauthn.exception.Base64UrlException;
 import com.yubico.webauthn.util.WebAuthnCodecs;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import lombok.NonNull;
 import lombok.Value;
 
@@ -46,7 +49,12 @@ public class CollectedClientData {
      * Input or output values for or from authenticator extensions, if any.
      */
     public Optional<JsonNode> getAuthenticatorExtensions() {
-        return Optional.ofNullable(clientData.get("authenticatorExtensions")).map(WebAuthnCodecs::deepCopy);
+        return Optional.ofNullable(clientData.get("authenticatorExtensions")).map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
     /**
@@ -60,7 +68,12 @@ public class CollectedClientData {
      * Input or output values for or from client extensions, if any.
      */
     public Optional<JsonNode> getClientExtensions() {
-        return Optional.ofNullable(clientData.get("clientExtensions")).map(WebAuthnCodecs::deepCopy);
+        return Optional.ofNullable(clientData.get("clientExtensions")).map(new Function<JsonNode, JsonNode>() {
+            @Override
+            public JsonNode apply(JsonNode jsonNode) {
+                return WebAuthnCodecs.deepCopy(jsonNode);
+            }
+        });
     }
 
     /**
@@ -75,25 +88,39 @@ public class CollectedClientData {
      */
     public final Optional<TokenBindingInfo> getTokenBinding() {
         return Optional.ofNullable(clientData.get("tokenBinding"))
-            .map(tb -> {
-                if (tb != null && tb.isObject()) {
-                    String status = tb.get("status").textValue();
-                    return new TokenBindingInfo(
-                        TokenBindingStatus.fromJson(status).orElseGet(() -> {
-                            throw new IllegalArgumentException("Invalid value for tokenBinding.status: " + status);
-                        }),
-                        Optional.ofNullable(tb.get("id"))
-                            .map(JsonNode::textValue)
-                            .map(id -> {
-                                try {
-                                    return ByteArray.fromBase64Url(id);
-                                } catch (Base64UrlException e) {
-                                    throw new IllegalArgumentException("Property \"id\" is not valid Base64Url data", e);
-                                }
-                            })
-                    );
-                } else {
-                    throw new IllegalArgumentException("Property \"tokenBinding\" missing from client data.");
+            .map(new Function<JsonNode, TokenBindingInfo>() {
+                @Override
+                public TokenBindingInfo apply(JsonNode tb) {
+                    if (tb != null && tb.isObject()) {
+                        String status = tb.get("status").textValue();
+                        return new TokenBindingInfo(
+                                TokenBindingStatus.fromJson(status).orElseGet(new Supplier<TokenBindingStatus>() {
+                                    @Override
+                                    public TokenBindingStatus get() {
+                                        throw new IllegalArgumentException("Invalid value for tokenBinding.status: " + status);
+                                    }
+                                }),
+                                Optional.ofNullable(tb.get("id"))
+                                        .map(new Function<JsonNode, String>() {
+                                            @Override
+                                            public String apply(JsonNode jsonNode) {
+                                                return jsonNode.textValue();
+                                            }
+                                        })
+                                        .map(new Function<String, ByteArray>() {
+                                            @Override
+                                            public ByteArray apply(String id) {
+                                                try {
+                                                    return ByteArray.fromBase64Url(id);
+                                                } catch (Base64UrlException e) {
+                                                    throw new IllegalArgumentException("Property \"id\" is not valid Base64Url data", e);
+                                                }
+                                            }
+                                        })
+                        );
+                    } else {
+                        throw new IllegalArgumentException("Property \"tokenBinding\" missing from client data.");
+                    }
                 }
             });
     }

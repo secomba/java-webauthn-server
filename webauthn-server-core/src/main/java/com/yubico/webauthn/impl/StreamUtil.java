@@ -12,7 +12,12 @@ import lombok.experimental.UtilityClass;
 public class StreamUtil {
 
     public static <T> Stream<T> toStream(Iterator<T> it) {
-        Iterable<T> iterable = () -> it;
+        Iterable<T> iterable = new Iterable<T>() {
+            @Override
+            public Iterator<T> iterator() {
+                return it;
+            }
+        };
         return StreamSupport.stream(iterable.spliterator(), false);
     }
 
